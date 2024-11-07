@@ -13,10 +13,13 @@ def start_server(host="127.0.0.1", port=9999):
     server.listen()
     print(f"[서버 시작] {host}:{port}에서 대기 중...")
 
+    
+
+
     while len(clients) < MAX_CLIENTS:
         client_socket, addr = server.accept()
         clients.append((client_socket, addr))  # 연결을 리스트에 추가
-        print(f"클라이언트 연결 완료: {addr}")
+        print(f"클라이언트 연결 완료: {addr}\n")
 
 
     client_ids = ['A', 'B', 'C', 'D']
