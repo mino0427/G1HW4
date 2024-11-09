@@ -89,22 +89,54 @@ def start_client(host="127.0.0.1", port=9999):
                 client.send(f"REQUEST_CHUNK:{target_client_id}:{chunk_index}\n".encode())
                 print(f"[청크 요청] 클라이언트 {target_client_id}에게 청크 ID {chunk_index} 요청")
                 break
-        
+
         # 3. 서버로부터 데이터 수신 및 처리
-        response = client.recv(4096).decode().strip()
-        if response.startswith("SEND_CHUNK"):
-            _, sender_client_id, chunk_index, chunk_data = response.split(":", 3)
-            chunk_index = int(chunk_index)
-            received_chunks[sender_client_id][chunk_index] = chunk_data.encode()
-            client_chunks[sender_client_id][chunk_index] = 1
-            print(f"[청크 수신] 클라이언트 {sender_client_id}로부터 청크 ID {chunk_index} 수신 및 저장")
-        elif response.startswith("REQUEST_CHUNK"):
-            _, requester_client_id, chunk_index = response.split(":")
-            chunk_index = int(chunk_index)
-            chunk_data = chunks[chunk_index]
-            client.send(f"CHUNK_DATA:{client_id}:{chunk_index}:{chunk_data.decode()}\n".encode())
-            print(f"[청크 전송] 클라이언트 {requester_client_id}에게 청크 ID {chunk_index} 전송 완료")
+        response = client.recv(4096)
+        try:
+            # 수신된 데이터를 텍스트로 변환해 헤더와 데이터 분리
+            decoded_response = response.decode(errors='ignore').strip()
+            if decoded_response.startswith("SEND_CHUNK"):
+                header_parts = decoded_response.split(":", 3)
+                if len(header_parts) == 4:
+                    _, sender_client_id, chunk_index, chunk_data = header_parts
+                    chunk_index = int(chunk_index)
+                    received_chunks[sender_client_id][chunk_index] = chunk_data.encode()
+                    client_chunks[sender_client_id][chunk_index] = 1
+                    print(f"[청크 수신] 클라이언트 {sender_client_id}로부터 청크 ID {chunk_index} 수신 및 저장")
+        except UnicodeDecodeError:
+            print("[클라이언트] 이진 데이터 수신 처리 오류")
+
+        # 요청 메시지를 처리하고 청크 데이터를 전송
+        if response.startswith(b"REQUEST_CHUNK"):
+            header_parts = response.decode().split(":")
+            if len(header_parts) == 3:
+                _, requester_client_id, chunk_index = header_parts
+                chunk_index = int(chunk_index)
+                chunk_data = chunks[chunk_index]
+                # 이진 데이터와 헤더를 함께 전송
+                client.send(f"CHUNK_DATA:{client_id}:{chunk_index}:".encode() + chunk_data)
+                print(f"[청크 전송] 클라이언트 {requester_client_id}에게 청크 ID {chunk_index} 전송 완료")
+
+
+
+        # # 3. 서버로부터 데이터 수신 및 처리
+        # response = client.recv(4096).decode().strip()
+        # if response.startswith("SEND_CHUNK"):
+        #     _, sender_client_id, chunk_index, chunk_data = response.split(":", 3)
+        #     chunk_index = int(chunk_index)
+        #     received_chunks[sender_client_id][chunk_index] = chunk_data.encode()
+        #     client_chunks[sender_client_id][chunk_index] = 1
+        #     print(f"[청크 수신] 클라이언트 {sender_client_id}로부터 청크 ID {chunk_index} 수신 및 저장")
         
+        # elif response.startswith("REQUEST_CHUNK"):
+        #     _, requester_client_id, chunk_index = response.split(":")
+        #     chunk_index = int(chunk_index)
+        #     # 청크 데이터 전송 시 이진 데이터와 헤더 구분
+        #     chunk_data = chunks[chunk_index]
+        #     header = f"CHUNK_DATA:{client_id}:{chunk_index}:".encode()
+        #     client.send(header + chunk_data)
+        #     print(f"[청크 전송] 클라이언트 {requester_client_id}에게 청크 ID {chunk_index} 전송 완료")
+
         # 순회 인덱스 업데이트
         order_index += 1
 
