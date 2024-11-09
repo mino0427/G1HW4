@@ -26,30 +26,6 @@ def split_file_into_chunks(expression_file, chunk_size=128 * 1024):
     
     return chunks
 
-def request_chunk(client, chunk_id):
-    """서버에 특정 청크를 요청"""
-    with lock:
-        client.send(f"REQUEST_CHUNK:{chunk_id}\n".encode())
-        print(f"[청크 요청] 청크 ID {chunk_id} 요청")
-
-def receive_chunk(client, chunk_id, client_chunks, received_chunks):
-    """서버로부터 청크를 수신하고 리스트에 반영 및 저장"""
-    with lock:
-        response = client.recv(4096).decode().strip()
-        if response == f"SEND_CHUNK:{chunk_id}":
-            chunk_size = int(client.recv(4096).decode().strip())
-            chunk_data = client.recv(chunk_size)
-            received_chunks[chunk_id] = chunk_data  # 받은 청크를 저장 리스트에 저장
-            client_chunks[chunk_id] = 1  # 보유 청크 리스트에 반영
-            print(f"[청크 수신 및 반영] 청크 ID {chunk_id}를 수신하여 리스트에 저장 및 보유 리스트에 반영")
-
-def send_chunk(client, chunk_id, chunks):
-    """서버에 필요한 청크를 요청받고 전송"""
-    with lock:
-        client.send(f"CHUNK_DATA:{chunk_id}:{len(chunks[chunk_id])}\n".encode())
-        client.send(chunks[chunk_id])
-        print(f"[청크 전송] 청크 ID {chunk_id} 전송 완료 (크기: {len(chunks[chunk_id])} 바이트)")
-
 # 서버에 연결하고 청크 단위로 파일을 나누는 클라이언트 함수
 def start_client(host="127.0.0.1", port=9999):
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -93,18 +69,46 @@ def start_client(host="127.0.0.1", port=9999):
             for file_key in client_chunks
         )
 
-    # 서버에 없는 청크를 요청
-    for chunk_id in range(total_chunks):
-        if client_chunks[client_id][chunk_id] == 0:  # 현재 클라이언트가 보유하지 않은 청크만 요청
-            request_chunk(client, chunk_id)
-            for file_key in received_chunks:
-                if received_chunks[file_key][chunk_id] is None:
-                    receive_chunk(client, chunk_id, client_chunks[client_id], received_chunks[file_key])
+    # 순회 방식 설정
+    request_order = [
+        {'A': 'B', 'B': 'C', 'C': 'D', 'D': 'A'},
+        {'A': 'C', 'B': 'D', 'C': 'A', 'D': 'B'},
+        {'A': 'D', 'B': 'A', 'C': 'B', 'D': 'C'}
+    ]
 
-        if all_chunks_received():
-            print(f"[완료] 클라이언트 {client_id}는 모든 파일의 청크를 보유하고 있으므로 연결을 종료합니다.")
-            client.close()
-            return
+    order_index = 0
+
+    while not all_chunks_received():
+        # 1. 현재 순회에 맞는 요청 순서를 설정
+        current_order = request_order[order_index % len(request_order)]
+        target_client_id = current_order[client_id]
+
+        # 2. 서버에 요청 메시지 전송
+        for chunk_index in range(total_chunks):
+            if received_chunks[target_client_id][chunk_index] is None:
+                client.send(f"REQUEST_CHUNK:{target_client_id}:{chunk_index}\n".encode())
+                print(f"[청크 요청] 클라이언트 {target_client_id}에게 청크 ID {chunk_index} 요청")
+                break
+        
+        # 3. 서버로부터 데이터 수신 및 처리
+        response = client.recv(4096).decode().strip()
+        if response.startswith("SEND_CHUNK"):
+            _, sender_client_id, chunk_index, chunk_data = response.split(":", 3)
+            chunk_index = int(chunk_index)
+            received_chunks[sender_client_id][chunk_index] = chunk_data.encode()
+            client_chunks[sender_client_id][chunk_index] = 1
+            print(f"[청크 수신] 클라이언트 {sender_client_id}로부터 청크 ID {chunk_index} 수신 및 저장")
+        elif response.startswith("REQUEST_CHUNK"):
+            _, requester_client_id, chunk_index = response.split(":")
+            chunk_index = int(chunk_index)
+            chunk_data = chunks[chunk_index]
+            client.send(f"CHUNK_DATA:{client_id}:{chunk_index}:{chunk_data.decode()}\n".encode())
+            print(f"[청크 전송] 클라이언트 {requester_client_id}에게 청크 ID {chunk_index} 전송 완료")
+        
+        # 순회 인덱스 업데이트
+        order_index += 1
+
+    print(f"[완료] 클라이언트 {client_id}는 모든 파일의 청크를 보유하고 있으므로 연결을 종료합니다.")
 
     # 파일이 완성되었는지 확인하고 합치기
     for file_key, chunks_list in received_chunks.items():
@@ -114,14 +118,6 @@ def start_client(host="127.0.0.1", port=9999):
                 for chunk in chunks_list:
                     output_file.write(chunk)
             print(f"[파일 생성 완료] {output_file_path}에 파일이 저장되었습니다.")
-
-    # 서버가 요청할 때 필요한 청크를 제공
-    while True:
-        request = client.recv(4096).decode().strip()
-        if request.startswith("REQUEST_CHUNK"):
-            _, chunk_id = request.split(":")
-            chunk_id = int(chunk_id)
-            send_chunk(client, chunk_id, chunks)
 
     client.close()
 

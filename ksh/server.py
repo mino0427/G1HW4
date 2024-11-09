@@ -1,121 +1,78 @@
 import socket
 import threading
-import time
 from queue import Queue
+import time
 
+# 하프 듀플렉스 통신을 고려한 서버 구현
 MAX_CLIENTS = 4
 lock = threading.Lock()
 request_queue = Queue()
 response_queue = Queue()
-system_clock = 0  # 전역 System Clock (msec 단위)
 
-client_speeds = {
-    'A': {'chunk_send': 0.006, 'msg_send': 0.0006},
-    'B': {'chunk_send': 0.007, 'msg_send': 0.0007},
-    'C': {'chunk_send': 0.008, 'msg_send': 0.0008},
-    'D': {'chunk_send': 0.009, 'msg_send': 0.0009}
-}
+clients = []  # 연결된 클라이언트 소켓과 주소를 저장
 
-# 클라이언트 정보 및 보유 파일 상태
-client_files = {
-    'A': [],  # 초기 상태에서 각 클라이언트의 파일 정보
-    'B': [],
-    'C': [],
-    'D': []
-}
-
-class SystemClock(threading.Thread):
-    def run(self):
-        global system_clock
+def handle_client(client_socket, client_address, client_id):
+    print(f"[연결됨] 클라이언트 {client_address} (ID: {client_id})")
+    try:
         while True:
-            time.sleep(0.001)  # 1 msec 단위로 증가
-            system_clock += 1
+            with lock:
+                if not request_queue.empty():
+                    request_msg = request_queue.get()
+                    _, target_client_id, chunk_id = request_msg.split(":")
+                    chunk_id = int(chunk_id)
 
-class ClientHandler(threading.Thread):
-    def __init__(self, client_socket, client_address, client_id):
-        super().__init__()
-        self.client_socket = client_socket
-        self.client_address = client_address
-        self.client_id = client_id
-        self.chunk_send_delay = client_speeds[client_id]['chunk_send']
-        self.msg_send_delay = client_speeds[client_id]['msg_send']
+                    for client_sock, client_addr, cid in clients:
+                        if cid == target_client_id:
+                            print(f"[서버] 클라이언트 {target_client_id}에게 요청 메시지 전달: {request_msg}")
+                            client_sock.send(request_msg.encode())
+                            time.sleep(0.01)  # 하프 듀플렉스 전송 대기
+                            break
 
-    def run(self):
-        try:
-            while True:
-                with lock:  # 하프 듀플렉스: 송수신이 교대로 이루어짐
-                    request = self.client_socket.recv(4096).decode().strip()
-                    if request.startswith("REQUEST_CHUNK"):
-                        _, chunk_id = request.split(":")
-                        chunk_id = int(chunk_id)
-                        print(f"[서버 - {system_clock} msec] 클라이언트 {self.client_id}로부터 청크 {chunk_id} 요청 수신")
+                if not response_queue.empty():
+                    response_msg = response_queue.get()
+                    _, sender_client_id, chunk_id, chunk_data = response_msg.split(":", 3)
+                    chunk_id = int(chunk_id)
 
-                        # 요청 큐에 요청 추가
-                        request_queue.put((self.client_id, chunk_id))
-                        print(f"[서버] 요청 큐에 {self.client_id}의 청크 {chunk_id} 저장")
+                    print(f"[서버] 클라이언트 {client_id}에게 청크 전송: CHUNK_ID {chunk_id}")
+                    client_socket.send(f"SEND_CHUNK:{sender_client_id}:{chunk_id}:{chunk_data}\n".encode())
 
-                        # 요청된 청크를 다른 클라이언트에서 검색 및 처리
-                        for client_key, file_chunks in client_files.items():
-                            if client_key != self.client_id and chunk_id in file_chunks:
-                                print(f"[서버 - {system_clock} msec] 클라이언트 {client_key}에게 청크 {chunk_id} 요청 전송")
-                                time.sleep(client_speeds[client_key]['msg_send'])  # 요청 메시지 전송 시간 지연
-
-                                # 해당 클라이언트로부터 청크 수신 및 응답 큐에 저장
-                                time.sleep(client_speeds[client_key]['chunk_send'])  # 청크 전송 시간 지연
-                                chunk_size = int(self.client_socket.recv(4096).decode().strip())
-                                chunk_data = self.client_socket.recv(chunk_size)
-                                response_queue.put((chunk_id, chunk_data))
-                                print(f"[서버 - {system_clock} msec] 응답 큐에 청크 {chunk_id} 저장 완료")
-
-                                # 클라이언트로 청크 전송
-                                self.client_socket.send(f"SEND_CHUNK:{chunk_id}\n".encode())
-                                self.client_socket.send(f"{chunk_size}\n".encode())
-                                self.client_socket.send(chunk_data)  # 실제 클라이언트로부터 받은 데이터 전송
-                                print(f"[서버 - {system_clock} msec] 클라이언트 {self.client_id}에게 청크 {chunk_id} 전송 완료")
-
-                                # 클라이언트의 전송 완료 메시지 대기
-                                time.sleep(self.msg_send_delay)  # 메시지 전송 시간 지연
-                                response = self.client_socket.recv(4096).decode().strip()
-                                if response == f"RECEIVED:{chunk_id}":
-                                    print(f"[서버 - {system_clock} msec] 클라이언트 {self.client_id}로부터 청크 {chunk_id} 전송 완료 메시지 수신")
-                                    client_files[self.client_id].append(chunk_id)
-                                    break
-        except Exception as e:
-            print(f"[오류] 클라이언트 {self.client_address} 처리 중 오류 발생: {e}")
-        finally:
-            self.client_socket.close()
-            print(f"[연결 종료] 클라이언트 {self.client_address} 연결 종료")
+            # 클라이언트로부터 데이터 수신
+            data = client_socket.recv(4096).decode().strip()
+            if data.startswith("REQUEST_CHUNK"):
+                print(f"[서버] 요청 수신: {data}")
+                request_queue.put(data)
+            elif data.startswith("CHUNK_DATA"):
+                print(f"[서버] 응답 수신: {data}")
+                response_queue.put(data)
+    except ConnectionResetError:
+        print(f"[연결 종료] 클라이언트 {client_address} 연결 종료")
+    finally:
+        client_socket.close()
+        clients = [(sock, addr, cid) for sock, addr, cid in clients if sock != client_socket]
+        print(f"[연결 종료] 클라이언트 {client_id} 연결 제거 완료")
 
 # 서버 실행 함수
 def start_server(host="127.0.0.1", port=9999):
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind((host, port))
-    server.listen(MAX_CLIENTS)
+    server.listen()
     print(f"[서버 시작] {host}:{port}에서 대기 중...")
 
-    # 시스템 클럭 시작
-    clock_thread = SystemClock()
-    clock_thread.daemon = True
-    clock_thread.start()
-
     client_ids = ['A', 'B', 'C', 'D']
-    clients = []
-
     try:
         while len(clients) < MAX_CLIENTS:
-            client_socket, addr = server.accept()
+            client_socket, client_address = server.accept()
             client_id = client_ids[len(clients)]
-            clients.append(client_socket)
-            print(f"[연결됨] 클라이언트 {addr} 연결 완료 (ID: {client_id})")
-
-            handler = ClientHandler(client_socket, addr, client_id)
-            handler.start()
+            clients.append((client_socket, client_address, client_id))
+            print(f"클라이언트 연결 완료: {client_address} (ID: {client_id})\n")
+            client_socket.send(f"FLAG:{client_id}\n".encode())
+            threading.Thread(target=handle_client, args=(client_socket, client_address, client_id)).start()
 
     except KeyboardInterrupt:
         print("[서버 종료] 서버가 종료됩니다.")
     finally:
-        for client in clients:
-            client.close()
+        for client_socket, _, _ in clients:
+            client_socket.close()
         server.close()
 
 if __name__ == "__main__":
