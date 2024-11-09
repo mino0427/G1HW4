@@ -26,11 +26,11 @@ def split_file_into_chunks(expression_file, chunk_size=128 * 1024):
     
     return chunks
 
-def request_chunk(client, client_id,chunk_id):
+def request_chunk(client, target_client_id,chunk_id):
     """서버에 특정 청크를 요청"""
     with lock:
-        client.send(f"REQUEST_CHUNK:{client_id}:{chunk_id}\n".encode())
-        print(f"[청크 요청] {client_id}의 청크 ID {chunk_id} 요청")
+        client.send(f"REQUEST_CHUNK:{target_client_id}:{chunk_id}\n".encode())
+        print(f"[청크 요청] {target_client_id}의 청크 ID {chunk_id} 요청")
 
 def send_chunk(client, client_id,chunk_id, chunks):
     """서버에 필요한 청크를 요청받고 전송"""
