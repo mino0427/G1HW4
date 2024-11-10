@@ -26,18 +26,6 @@ def split_file_into_chunks(expression_file, chunk_size=128 * 1024):
     
     return chunks
 
-def request_chunk(client, target_client_id,chunk_id):
-    """서버에 특정 청크를 요청"""
-    with lock:
-        client.send(f"REQUEST_CHUNK:{target_client_id}:{chunk_id}\n".encode())
-        print(f"[청크 요청] {target_client_id}의 청크 ID {chunk_id} 요청")
-
-def send_chunk(client, client_id,chunk_id, chunks):
-    """서버에 필요한 청크를 요청받고 전송"""
-    with lock:
-        client.send(f"CHUNK_DATA:{client_id}:{chunk_id}:{chunks[chunk_id]}\n".encode())
-        print(f"[청크 전송] 청크 ID {chunk_id} 전송 완료")
-
 # 서버에 연결하고 청크 단위로 파일을 나누는 클라이언트 함수
 def start_client(host="127.0.0.1", port=9999):
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -49,10 +37,8 @@ def start_client(host="127.0.0.1", port=9999):
     client_id = flag_msg.split(":")[1]  # FLAG:A, FLAG:B 등에서 ID만 추출
     print(f"[클라이언트 ID 설정] ID: {client_id}")
 
-
-##################################절대 경로로 수정하기-------------------완료
     # 클라이언트 접속 순서에 맞는 파일 선택
-    expression_file = os.path.join("C:\Users\n3225\OneDrive\Desktop\test", f"{client_id}.file")
+    expression_file = os.path.join("C:/Users/n3225/OneDrive/Desktop/test", f"{client_id}.file")
     print(f"[파일 선택] {expression_file}\n")
 
     # 파일을 청크 단위로 나누기
@@ -83,50 +69,71 @@ def start_client(host="127.0.0.1", port=9999):
             for file_key in client_chunks
         )
 
+    # 순회 방식 설정
+    request_order = [
+        {'A': 'B', 'B': 'C', 'C': 'D', 'D': 'A'},
+        {'A': 'C', 'B': 'D', 'C': 'A', 'D': 'B'},
+        {'A': 'D', 'B': 'A', 'C': 'B', 'D': 'C'}
+    ]
 
-######################################client_id 순회 추가하기
-    while True:
-        # 서버에 없는 청크를 요청
-        for chunk_id in range(total_chunks):
-            for client_id in client_chunks:  # client_chunks의 각 key 값을 기준으로 순회
-                if client_chunks[client_id][chunk_id] == 0:  # 현재 클라이언트가 보유하지 않은 청크만 요청
-                    request_chunk(client,client_id, chunk_id)
-                    break  # 첫 번째 청크 요청 후 루프 종료
+    order_index = 0
 
-        request = client.recv(4096).decode().strip()
+    while not all_chunks_received():
+        # 1. 현재 순회에 맞는 요청 순서를 설정
+        current_order = request_order[order_index % len(request_order)]
+        target_client_id = current_order[client_id]
 
-        # 서버의 메시지가 클라이언트가 요청한 청크 데이터인 경우
-        if request.startswith(f"SEND_CHUNK"):
-            _, sender_client_id, chunk_id, chunk_data = request.split(":")
-            chunk_id = int(chunk_id)
-            chunk_data = chunk_data.encode()  # 필요한 경우 데이터 인코딩
+        # 2. 서버에 요청 메시지 전송
+        for chunk_index in range(total_chunks):
+            if received_chunks[target_client_id][chunk_index] is None:
+                client.send(f"REQUEST_CHUNK:{client_id}:{target_client_id}:{chunk_index}<END>".encode())#여기
+                print(f"[청크 요청] 클라이언트 {target_client_id}에게 청크 ID {chunk_index} 요청")
+                break
 
-            # 받은 청크를 저장 및 보유 청크 리스트에 반영
-            if received_chunks[sender_client_id][chunk_id] is None:
-                received_chunks[sender_client_id][chunk_id] = chunk_data  # 받은 청크를 저장
-                client_chunks[client_id][chunk_id] = 1  # 보유 청크 리스트에 반영
-                print(f"[청크 수신 및 반영] 클라이언트 {sender_client_id}로부터 청크 ID {chunk_id}를 수신하여 저장")
-                
+        # 3. 서버로부터 데이터 수신 및 처리
+        response = client.recv(4096)
+        # 요청 메시지를 처리하고 청크 데이터를 전송
+        if response.startswith(b"REQUEST_CHUNK"):
+            decoded_response = response.decode()
+            _, req_client_id,_, chunk_index = decoded_response.split(":")#여기
+            chunk_index = int(chunk_index)
+            chunk_data = chunks[chunk_index]
 
-        # 서버의 메시지가 청크 데이터 요청인 경우-----------------나중에 서버는 요청한 클라이언트가 누구인지 알고 있어야 한다
-        elif request.startswith("REQUEST_CHUNK"):
-            _, requester_client_id, chunk_id = request.split(":")
-            chunk_id = int(chunk_id)
-            send_chunk(client,client_id, chunk_id, chunks)
-            print(f"[청크 전송] 클라이언트 {requester_client_id}에게 청크 ID {chunk_id} 전송 완료")
-
-        # 모든 청크를 다 받은 경우 연결 종료
-        if all_chunks_received():
-            print(f"[완료] 클라이언트 {client_id}는 모든 파일의 청크를 보유하고 있으므로 연결을 종료합니다.")
-            client.close()
-            break
+            # 이진 데이터와 헤더를 함께 전송
+            header = f"CHUNK_DATA:{req_client_id}:{client_id}:{chunk_index}:<END>".encode()
+            end = "<END>".encode()
+            send_chunk_data=header+chunk_data + end
+            client.send(send_chunk_data)
+            print(f"[청크 전송] 클라이언트 {client_id}가 청크 ID {chunk_index} 전송 완료")
 
 
+            response = client.recv(4096)
+            try:
+                # 수신된 데이터를 텍스트로 변환해 헤더와 데이터 분리
+                if response.startswith(b"SEND_CHUNK"):
+                    header_end_index = response.index(b"<END>")
+                    header = response[:header_end_index].decode()
+                    chunk_data = response[header_end_index + 5:]  # 헤더 다음의 이진 데이터 부분
+
+                    _, sender_client_id, chunk_index,_ = header.split(":")#################데이터 받는 형식이상 ,_ 추가함
+                    chunk_index = int(chunk_index)
+
+                    received_chunks[sender_client_id][chunk_index] = chunk_data
+                    client_chunks[sender_client_id][chunk_index] = 1
+                    print(f"[청크 수신] 클라이언트{client_id}가 {sender_client_id}로부터 청크 ID {chunk_index} 수신 및 저장")
+
+            except UnicodeDecodeError:
+                print("[클라이언트] 이진 데이터 수신 처리 오류")
+
+    
+        order_index += 1
+
+    print(f"[완료] 클라이언트 {client_id}는 모든 파일의 청크를 보유하고 있으므로 연결을 종료합니다.")
 
     # 파일이 완성되었는지 확인하고 합치기
     for file_key, chunks_list in received_chunks.items():
         if all(chunks_list):
-            output_file_path = os.path.join("C:\Users\n3225\OneDrive\Desktop\test", f"{client_id}_{file_key}_complete.file")
+            output_file_path = os.path.join("C:/Users/n3225/OneDrive/Desktop/test", f"{client_id}_{file_key}_complete.file")
             with open(output_file_path, 'wb') as output_file:
                 for chunk in chunks_list:
                     output_file.write(chunk)
