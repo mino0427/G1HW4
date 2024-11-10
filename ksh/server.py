@@ -32,28 +32,49 @@ def handle_client(client_socket, client_address, client_id):
                 if not response_queue.empty():
                     response_msg = response_queue.get()
                     header, chunk_data = response_msg.split(b":", 3)[:3], response_msg.split(b":", 3)[-1]
-                    _, sender_client_id, chunk_id = header.decode().split(":")
+                    _, sender_client_id, chunk_id = header.split(":")
                     chunk_id = int(chunk_id)
 
                     print(f"[서버] 클라이언트 {client_id}에게 청크 전송: CHUNK_ID {chunk_id}")
                     client_socket.send(f"SEND_CHUNK:{sender_client_id}:{chunk_id}:".encode() + chunk_data)
 
-           # 클라이언트로부터 데이터 수신
-            data = client_socket.recv(4096)
-            try:
-                decoded_data = data.decode().strip()
-                if decoded_data.startswith("REQUEST_CHUNK"):
-                    print(f"[서버] 요청 수신: {decoded_data}")
-                    request_queue.put(decoded_data)
-                elif decoded_data.startswith("CHUNK_DATA"):
-                    # CHUNK_DATA의 헤더 부분만 분리
-                    header, chunk_data = decoded_data.rsplit(":", 1)
-                    response_queue.put(f"{header}:".encode() + chunk_data.encode())
-                    print(f"[서버] 응답 수신: {header}")
-            except UnicodeDecodeError:
-                # 이진 데이터는 디코딩하지 않고 바로 처리
-                print(f"[서버] 이진 데이터 수신")
-                response_queue.put(data)
+                # 클라이언트로부터 데이터 수신
+                data = client_socket.recv(4096)
+                try:
+                    decoded_data = data.decode(errors='ignore').strip()
+                    if decoded_data.startswith("REQUEST_CHUNK"):
+                        print(f"[서버] 요청 수신: {decoded_data}")
+                        request_queue.put(decoded_data)
+                    elif decoded_data.startswith("CHUNK_DATA"):
+                        # CHUNK_DATA의 헤더와 이진 데이터 분리
+                        header_end_index = data.index(b"\n")
+                        header = data[:header_end_index].decode()
+                        chunk_data = data[header_end_index + 1:]  # 헤더 다음의 이진 데이터 부분
+
+                        response_queue.put(f"{header}:\n".encode() + chunk_data)
+                        print(f"[서버] 응답 수신: {header}")
+                except UnicodeDecodeError:
+                    # 이진 데이터는 디코딩하지 않고 바로 처리
+                    print(f"[서버] 이진 데이터 수신")
+                    response_queue.put(data)
+
+
+        #    # 클라이언트로부터 데이터 수신
+        #     data = client_socket.recv(4096)
+        #     try:
+        #         decoded_data = data.decode().strip()
+        #         if decoded_data.startswith("REQUEST_CHUNK"):
+        #             print(f"[서버] 요청 수신: {decoded_data}")
+        #             request_queue.put(decoded_data)
+        #         elif decoded_data.startswith("CHUNK_DATA"):
+        #             # CHUNK_DATA의 헤더 부분만 분리
+        #             header, chunk_data = decoded_data.rsplit(":", 1)
+        #             response_queue.put(f"{header}:".encode() + chunk_data.encode())
+        #             print(f"[서버] 응답 수신: {header}")
+        #     except UnicodeDecodeError:
+        #         # 이진 데이터는 디코딩하지 않고 바로 처리
+        #         print(f"[서버] 이진 데이터 수신")
+        #         response_queue.put(data)
 
     except ConnectionResetError:
         print(f"[연결 종료] 클라이언트 {client_address} 연결 종료")
