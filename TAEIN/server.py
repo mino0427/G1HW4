@@ -45,25 +45,32 @@ def handle_client(client_socket, client_address, client_id):
                     for client_sock, client_address, cid in clients:
                         if cid == req_client_id:
                             print(f"[서버] 클라이언트 {req_client_id}에게 청크 전송: CHUNK_ID {sender_client_id}:{chunk_id}\n")
-                            client_sock.send(f"SEND_CHUNK:{sender_client_id}:{chunk_id}:<END>".encode() + chunk_data)
+                            client_sock.send(f"SEND_CHUNK:{sender_client_id}:{chunk_id}:<EoH>".encode() + chunk_data)
                             
                             
             # 클라이언트로부터 데이터 수신
             # buffer에 값이 있는 경우 우선 처리
             if b"<END>" in buffer:
-                newline_index = buffer.index(b"<END>")
-                message = buffer[:newline_index].decode(errors='ignore').strip()
-                buffer = buffer[newline_index + 5:]  # 처리한 부분을 제거하고 나머지 저장
+                # newline_index = buffer.index(b"<END>")
+                # message = buffer[:newline_index].decode(errors='ignore').strip()
+                # buffer = buffer[newline_index + 5:]  # 처리한 부분을 제거하고 나머지 저장
 
-                if message:
-                    if message.startswith("REQUEST_CHUNK"):
+                if buffer:
+                    if buffer.startswith(b"REQUEST_CHUNK"):
+                        newline_index = buffer.index(b"<END>")
+                        message = buffer[:newline_index].decode(errors='ignore').strip()
+                        buffer = buffer[newline_index + 5:]  # 처리한 부분을 제거하고 나머지 저장
                         print(f"[서버] 요청 수신: {message}\n")
                         request_queue.put(message)
                         continue
                     
-                    elif message.startswith("CHUNK_DATA"):
+                    elif buffer.startswith(b"CHUNK_DATA"):
                         # buffer에 남은 chunk_data 추가
                         #chunk_data = buffer.rstrip(b"<END>")  # 마지막의 <END> 제거
+                        ################################
+                        newline_index = buffer.index(b"<EoH>")
+                        message = buffer[:newline_index].decode(errors='ignore').strip()
+                        buffer = buffer[newline_index + 5:]  # 처리한 부분을 제거하고 나머지 저장
                         ################################
                         chunk_data = buffer
                         buffer=b""
@@ -72,14 +79,19 @@ def handle_client(client_socket, client_address, client_id):
                         print(f"[서버] 응답 수신: {message}\n")
                         continue
                         
-
+                        
             # buffer에 <END>이 없으면 새 데이터를 수신
             if b"<END>" not in buffer:
-                data = client_socket.recv(4096)
-                if not data:
+                buffer = client_socket.recv(4096)  # 일단 첫 번째 데이터를 받음
+                if not buffer:
                     print("data가 아닌 무언가가 들어옴<END>\n")
-                    break
-                buffer += data  # 새로 받은 데이터를 buffer에 추가
+                else:
+                    while b"<END>" not in buffer:  # <END>가 없을 동안 반복
+                        data = client_socket.recv(4096)
+                        if not data:
+                            print("data가 아닌 무언가가 들어옴<END>\n")
+                            break
+                        buffer += data  # 새로 받은 데이터를 buffer에 추가
 
 
 

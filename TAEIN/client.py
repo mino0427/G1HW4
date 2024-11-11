@@ -89,6 +89,7 @@ def start_client(host="127.0.0.1", port=9999):
                 client.send(f"REQUEST_CHUNK:{client_id}:{target_client_id}:{chunk_index}<END>".encode())#여기
                 print(f"[청크 요청] 클라이언트 {target_client_id}에게 청크 ID {chunk_index} 요청")
                 break
+            
 
         # 3. 서버로부터 데이터 수신 및 처리
         response = client.recv(4096)
@@ -100,18 +101,33 @@ def start_client(host="127.0.0.1", port=9999):
             chunk_data = chunks[chunk_index]
 
             # 이진 데이터와 헤더를 함께 전송
-            header = f"CHUNK_DATA:{req_client_id}:{client_id}:{chunk_index}:<END>".encode()
+            header = f"CHUNK_DATA:{req_client_id}:{client_id}:{chunk_index}:<EoH>".encode()
             end = "<END>".encode()
             send_chunk_data=header+chunk_data + end
             client.send(send_chunk_data)
             print(f"[청크 전송] 클라이언트 {client_id}가 청크 ID {chunk_index} 전송 완료")
 
 
-            response = client.recv(4096)
+            #response = client.recv(4096)
+            #######################################
+            response = client.recv(4096)  # 일단 첫 번째 데이터를 받음
+            if not response:
+                print("data가 아닌 무언가가 들어옴<END>\n")
+            else:
+                while b"<END>" not in response:  # <END>가 없을 동안 반복
+                    data = client.recv(4096)
+                    if not data:
+                        print("data가 아닌 무언가가 들어옴<END>\n")
+                        break
+                    response += data  # 새로 받은 데이터를 buffer에 추가
+
+            
+            
+            #######################################
             try:
                 # 수신된 데이터를 텍스트로 변환해 헤더와 데이터 분리
                 if response.startswith(b"SEND_CHUNK"):
-                    header_end_index = response.index(b"<END>")
+                    header_end_index = response.index(b"<EoH>")
                     header = response[:header_end_index].decode()
                     chunk_data = response[header_end_index + 5:]  # 헤더 다음의 이진 데이터 부분
 
