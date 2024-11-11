@@ -38,7 +38,7 @@ def start_client(host="127.0.0.1", port=9999):
     print(f"[클라이언트 ID 설정] ID: {client_id}")
 
     # 클라이언트 접속 순서에 맞는 파일 선택
-    expression_file = os.path.join("C:\\Users\\ksh07\\Desktop\\file", f"{client_id}.file")
+    expression_file = os.path.join("C:/Users/n3225/OneDrive/Desktop/test", f"{client_id}.file")
     print(f"[파일 선택] {expression_file}\n")
 
     # 파일을 청크 단위로 나누기
@@ -49,36 +49,24 @@ def start_client(host="127.0.0.1", port=9999):
     else:
         print("[오류] 파일 청크가 생성되지 않았습니다.")
 
-    # # 각 클라이언트가 보유한 청크 리스트 설정
-    # client_chunks = {
-    #     'A': [1 if client_id == 'A' else 0 for _ in range(total_chunks)],  # A는 A 파일만 가짐
-    #     'B': [1 if client_id == 'B' else 0 for _ in range(total_chunks)],  # B는 B 파일만 가짐
-    #     'C': [1 if client_id == 'C' else 0 for _ in range(total_chunks)],  # C는 C 파일만 가짐
-    #     'D': [1 if client_id == 'D' else 0 for _ in range(total_chunks)]   # D는 D 파일만 가짐
-    # }
-
-    # # 각 클라이언트가 보유하지 않은 3개의 파일을 저장할 리스트 생성 (각 파일의 청크를 None으로 초기화)
-    # received_chunks = {
-    #     file_key: [None] * total_chunks for file_key in client_chunks if file_key != client_id
-    # }
-
-    received_chunks = {
-        file_key: [None] * total_chunks for file_key in ['A', 'B', 'C', 'D'] if file_key != client_id
+    # 각 클라이언트가 보유한 청크 리스트 설정
+    client_chunks = {
+        'A': [1 if client_id == 'A' else 0 for _ in range(total_chunks)],  # A는 A 파일만 가짐
+        'B': [1 if client_id == 'B' else 0 for _ in range(total_chunks)],  # B는 B 파일만 가짐
+        'C': [1 if client_id == 'C' else 0 for _ in range(total_chunks)],  # C는 C 파일만 가짐
+        'D': [1 if client_id == 'D' else 0 for _ in range(total_chunks)]   # D는 D 파일만 가짐
     }
 
+    # 각 클라이언트가 보유하지 않은 3개의 파일을 저장할 리스트 생성 (각 파일의 청크를 None으로 초기화)
+    received_chunks = {
+        file_key: [None] * total_chunks for file_key in client_chunks if file_key != client_id
+    }
 
-    # # 클라이언트 종료 조건: 모든 파일의 청크가 완전히 채워졌는지 확인
-    # def all_chunks_received():
-    #     return all(
-    #         all(chunk == 1 for chunk in client_chunks[file_key])
-    #         for file_key in client_chunks
-    #     )
-    
-    # 클라이언트 종료 조건: 모든 파일의 청크가 실제로 채워졌는지 확인
+    # 클라이언트 종료 조건: 모든 파일의 청크가 완전히 채워졌는지 확인
     def all_chunks_received():
         return all(
-            all(chunk is not None for chunk in received_chunks[file_key])
-            for file_key in received_chunks
+            all(chunk == 1 for chunk in client_chunks[file_key])
+            for file_key in client_chunks
         )
 
     # 순회 방식 설정
@@ -130,13 +118,8 @@ def start_client(host="127.0.0.1", port=9999):
                     _, sender_client_id, chunk_index,_ = header.split(":")#################데이터 받는 형식이상 ,_ 추가함
                     chunk_index = int(chunk_index)
 
-                    #received_chunks[sender_client_id][chunk_index] = chunk_data
-                    if chunk_data is not None:  # 데이터가 유효한 경우에만 저장
-                        received_chunks[sender_client_id][chunk_index] = chunk_data
-                    else:
-                        print(f"[오류] 청크 데이터가 손상되었거나 수신되지 않았습니다. 청크 ID: {chunk_index}")
-
-                    #client_chunks[sender_client_id][chunk_index] = 1
+                    received_chunks[sender_client_id][chunk_index] = chunk_data
+                    client_chunks[sender_client_id][chunk_index] = 1
                     print(f"[청크 수신] 클라이언트{client_id}가 {sender_client_id}로부터 청크 ID {chunk_index} 수신 및 저장")
 
             except UnicodeDecodeError:
@@ -150,7 +133,7 @@ def start_client(host="127.0.0.1", port=9999):
     # 파일이 완성되었는지 확인하고 합치기
     for file_key, chunks_list in received_chunks.items():
         if all(chunks_list):
-            output_file_path = os.path.join("C:\\Users\\ksh07\\Desktop\\file", f"{client_id}_{file_key}_complete.file")
+            output_file_path = os.path.join("C:/Users/n3225/OneDrive/Desktop/test", f"{client_id}_{file_key}_complete.file")
             with open(output_file_path, 'wb') as output_file:
                 for chunk in chunks_list:
                     output_file.write(chunk)
