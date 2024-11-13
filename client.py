@@ -1,6 +1,7 @@
 import socket
 import os
 import threading
+import hashlib
 
 lock = threading.Lock()
 
@@ -77,10 +78,22 @@ def start_client(host="127.0.0.1", port=9999):
     client_id = flag_msg.split(":")[1]  # FLAG:A, FLAG:B 등에서 ID만 추출
     print(f"[클라이언트 ID 설정] ID: {client_id}")
 
+
+
     # 클라이언트 ID에 따라 로그 파일 지정
+
+    if client_id == 'A':
+        client_num = 1
+    elif client_id == 'B':
+        client_num = 2
+    elif client_id == 'C':
+        client_num = 3
+    elif client_id == 'D':
+        client_num = 4
+
     log_file_path = f"Client{client_id}.txt"
     log_file = open(log_file_path, 'w')  # 로그 파일 직접 열기
-    log_file.write(f"[로그 시작] 클라이언트 {client_id} 로그 파일\n")
+    log_file.write(f"[로그 시작] 클라이언트 {client_num} 로그 파일\n")
 
     # 클라이언트 접속 순서에 맞는 파일 선택
     
@@ -212,6 +225,52 @@ def start_client(host="127.0.0.1", port=9999):
             clock=clients_system_clock[client_id]
             print(f"{clock}[파일 생성 완료] {output_file_path}에 파일이 저장되었습니다.")
             log_file.write(f"{clock}[파일 생성 완료] {output_file_path}에 파일이 저장되었습니다.\n")
+
+
+        #MD5 hash값 계산하기
+        path = os.path.dirname(os.path.abspath(__file__))
+        
+        # 파일 경로 목록
+        file_paths = [
+            path+f"/A.file",
+            path+f"/B_A_complete.file",
+            path+f"/C_A_complete.file",
+            path+f"/D_A_complete.file",
+            
+            path+f"/B.file",
+            path+f"/A_B_complete.file",
+            path+f"/C_B_complete.file",
+            path+f"/D_B_complete.file",
+            
+            path+f"/C.file",
+            path+f"/A_C_complete.file",
+            path+f"/B_C_complete.file",
+            path+f"/D_C_complete.file",
+            
+            path + f"/D.file",  
+            path + f"/A_D_complete.file",    
+            path + f"/B_D_complete.file",  
+            path + f"/C_D_complete.file"
+        ]
+        
+        # 각 파일의 MD5 해시 계산
+    hash_results = {}
+    for file_path in file_paths:
+        try:
+            with open(file_path, 'rb') as file:
+                file_data = file.read()
+                md5_hash = hashlib.md5(file_data).hexdigest()
+                hash_results[file_path] = md5_hash
+        except FileNotFoundError:
+            hash_results[file_path] = "File not found"
+        except Exception as e:
+            hash_results[file_path] = f"Error: {str(e)}"
+
+    # hash_results의 데이터 출력
+    for file_path, md5_hash in hash_results.items():
+        print(f"{file_path}: {md5_hash}")
+
+        
 
     client.close()
 

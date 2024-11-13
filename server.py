@@ -164,9 +164,6 @@ def handle_client(client_socket, client_address, client_id,log_file):
                         buffer += data  # 새로 받은 데이터를 buffer에 추가
 
 
-
-
-
     except ConnectionResetError:
         print(f"[연결 종료] 클라이언트 {client_address} 연결 종료\n")
         log_file.write(f"[연결 종료] 클라이언트 {client_address} 연결 종료\n")
@@ -223,13 +220,16 @@ def start_server(host="127.0.0.1", port=9999):
             avg_time = clients_system_clock[client] / (3907*3)
             print(f"client {client}의 평균 전송 시간: {avg_time} msec\n")
             log_file.write(f"client {client}의 평균 전송 시간: {avg_time} msec\n")
-                
-        print(f"{round(sync_with_max_client_time(), 1)}[서버 종료] 서버가 종료됩니다.\n")
-        log_file.write(f"{round(sync_with_max_client_time(), 1)}[서버 종료] 서버가 종료됩니다.\n")
+            sync_with_max_client_time()
+            
+        print(f"{clients_system_clock[client_id]}[서버 종료] 서버가 종료됩니다.\n")
+        log_file.write(f"{clients_system_clock[client_id]}[서버 종료] 서버가 종료됩니다.\n")
                 
         for client_socket, _, _ in clients:
             client_socket.close()
         server.close()
+        
+        
 
 if __name__ == "__main__":
     start_server()
