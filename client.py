@@ -78,10 +78,22 @@ def start_client(host="127.0.0.1", port=9999):
     client_id = flag_msg.split(":")[1]  # FLAG:A, FLAG:B 등에서 ID만 추출
     print(f"[클라이언트 ID 설정] ID: {client_id}")
 
+
+
     # 클라이언트 ID에 따라 로그 파일 지정
+
+    if client_id == 'A':
+        client_num = 1
+    elif client_id == 'B':
+        client_num = 2
+    elif client_id == 'C':
+        client_num = 3
+    elif client_id == 'D':
+        client_num = 4
+
     log_file_path = f"Client{client_id}.txt"
     log_file = open(log_file_path, 'w')  # 로그 파일 직접 열기
-    log_file.write(f"[로그 시작] 클라이언트 {client_id} 로그 파일\n")
+    log_file.write(f"[로그 시작] 클라이언트 {client_num} 로그 파일\n")
 
     # 클라이언트 접속 순서에 맞는 파일 선택
     
