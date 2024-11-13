@@ -175,7 +175,7 @@ def handle_client(client_socket, client_address, client_id,log_file):
         log_file.write(f"{round(clients_system_clock[client_id],1)}[연결 종료] 클라이언트 {client_id} 연결 제거 완료\n")
         
 # 서버 실행 함수
-def start_server(host="127.0.0.1", port=9999):
+def start_server(host="0.0.0.0", port=9999):
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind((host, port))
     server.listen()

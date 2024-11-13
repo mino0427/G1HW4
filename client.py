@@ -68,7 +68,7 @@ def split_file_into_chunks(output_file_path, chunk_size,log_file):
     return chunks
 
 # 서버에 연결하고 청크 단위로 파일을 나누는 클라이언트 함수
-def start_client(host="127.0.0.1", port=9999):
+def start_client(host="34.68.170.234", port=9999):
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client.connect((host, port))
     print(f"[서버 연결] {host}:{port}에 연결됨.")
