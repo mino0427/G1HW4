@@ -1,6 +1,7 @@
 import socket
 import os
 import threading
+import hashlib
 
 lock = threading.Lock()
 
@@ -212,6 +213,52 @@ def start_client(host="127.0.0.1", port=9999):
             clock=clients_system_clock[client_id]
             print(f"{clock}[파일 생성 완료] {output_file_path}에 파일이 저장되었습니다.")
             log_file.write(f"{clock}[파일 생성 완료] {output_file_path}에 파일이 저장되었습니다.\n")
+
+
+        #MD5 hash값 계산하기
+        path = os.path.dirname(os.path.abspath(__file__))
+        
+        # 파일 경로 목록
+        file_paths = [
+            path+f"/A.file",
+            path+f"/B_A_complete.file",
+            path+f"/C_A_complete.file",
+            path+f"/D_A_complete.file",
+            
+            path+f"/B.file",
+            path+f"/A_B_complete.file",
+            path+f"/C_B_complete.file",
+            path+f"/D_B_complete.file",
+            
+            path+f"/C.file",
+            path+f"/A_C_complete.file",
+            path+f"/B_C_complete.file",
+            path+f"/D_C_complete.file",
+            
+            path + f"/D.file",  
+            path + f"/A_D_complete.file",    
+            path + f"/B_D_complete.file",  
+            path + f"/C_D_complete.file"
+        ]
+        
+        # 각 파일의 MD5 해시 계산
+    hash_results = {}
+    for file_path in file_paths:
+        try:
+            with open(file_path, 'rb') as file:
+                file_data = file.read()
+                md5_hash = hashlib.md5(file_data).hexdigest()
+                hash_results[file_path] = md5_hash
+        except FileNotFoundError:
+            hash_results[file_path] = "File not found"
+        except Exception as e:
+            hash_results[file_path] = f"Error: {str(e)}"
+
+    # hash_results의 데이터 출력
+    for file_path, md5_hash in hash_results.items():
+        print(f"{file_path}: {md5_hash}")
+
+        
 
     client.close()
 
