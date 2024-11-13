@@ -80,10 +80,17 @@
 4. 구현한 최적의 알고리즘 제시 및 설명
 
 ⦁ 알고리즘 시나리오
-① 
-②
-③
-④ 
+① [Client] request_order[]을 기반으로 서버에 요청 메시지 전송(REQUEST_CHUNK)
+	request_order = [
+        {'A': 'B', 'B': 'C', 'C': 'D', 'D': 'A'},
+        {'A': 'C', 'B': 'D', 'C': 'A', 'D': 'B'},
+        {'A': 'D', 'B': 'A', 'C': 'B', 'D': 'C'}
+    ]
+② [Server] 클라이언트로부터 "REQUEST_CHUNK"를 받고 저장. A, B, C, D 클라이언트의 각각의 4개의 요청이 Q에 차면 요청 위치에 맞게 4개의 클라이언트로 전송
+③ [Client] 서버로부터 요청 수신 및 요청에 맞는 데이터 전송 (REQUEST_CHUNK)
+④ [Server] 클라이언트로부터 "CHUNK_DATA"를 받고 저장. A, B, C, D,에서 보낸 4개의 CHUNK가 Q에 차면 위치에 맞게 4개의 클라이언트로 전송
+⑤ [Client] 서버로부터 요청한 데이터 수신 및 received_chunks에 저장
+⑥ [Client] all_chunks_received()로 chunk가 3907개가 다 모였는지 확인하고 합치기.
 
 
 5. Error or Additional Message Handling
